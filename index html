@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>BOKA APEX AI</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkJPS0EgQVBFWCIsCiAgInNob3J0X25hbWUiIjogIkJva2EiLAogICJzdGFydF91cmwiOiAiaW5kZXguaHRtbCIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzA1MDUwNyIsCiAgInRoZW1lX2NvbG9yIjogIiMwNTA1MDciCn0=">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    
+    <style>
+        :root { --accent: #6366f1; --bg: #050507; --card: #121214; }
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { background: var(--bg); color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Chat Area & Smooth Scrolling */
+        .chat-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; scrollbar-width: none; }
+        .chat-area::-webkit-scrollbar { display: none; }
+        
+        /* Message Bubbles */
+        .bubble { max-width: 88%; padding: 14px 18px; border-radius: 22px; font-size: 15px; line-height: 1.6; animation: slideUp 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); word-wrap: break-word; }
+        .user { background: var(--accent); align-self: flex-end; border-bottom-right-radius: 4px; box-shadow: 0 8px 20px -5px rgba(99, 102, 241, 0.5); }
+        .ai { background: var(--card); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.08); white-space: pre-wrap; }
+        
+        /* Mode Switcher Styles */
+        .mode-btn { padding: 6px 14px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #333; transition: 0.3s; color: #888; }
+        .active-mode { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
+        
+        /* Animations */
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .typing span { width: 5px; height: 5px; background: #666; border-radius: 50%; display: inline-block; margin: 0 2px; animation: bounce 1.4s infinite; }
+        @keyframes bounce { 0%, 100% { transform: scale(1); opacity: 0.3; } 50% { transform: scale(1.3); opacity: 1; } }
+        
+        /* Status Indicator */
+        .status-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 10px #22c55e; }
+        .offline .status-dot { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+    </style>
+</head>
+<body class="online">
+
+    <header class="p-4 pt-6 border-b border-white/5 bg-[#050507]/90 backdrop-blur-2xl sticky top-0 z-50">
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-3">
+                <div id="status-icon" class="status-dot"></div>
+                <span class="font-black tracking-[0.2em] text-xs uppercase opacity-80">Apex Core</span>
+            </div>
+            <div class="flex gap-5 text-gray-400">
+                <button onclick="copyLast()" title="Copy Last Response"><span class="material-icons-round text-xl">content_copy</span></button>
+                <button onclick="speakLast()" title="Read Aloud"><span class="material-icons-round text-xl">volume_up</span></button>
+                <button onclick="clearChat()" title="Clear Memory"><span class="material-icons-round text-xl">restart_alt</span></button>
+            </div>
+        </div>
+        
+        <div class="flex justify-center gap-2">
+            <button id="m-balanced" onclick="setMode('balanced')" class="mode-btn active-mode">Balanced</button>
+            <button id="m-creative" onclick="setMode('creative')" class="mode-btn">Creative</button>
+            <button id="m-precise" onclick="setMode('precise')" class="mode-btn">Precise</button>
+        </div>
+    </header>
+
+    <div id="feed" class="chat-area"></div>
+
+    <div class="p-4 pb-10 bg-gradient-to-t from-[#050507] via-[#050507] to-transparent">
+        <div class="max-w-3xl mx-auto flex items-center bg-[#18181b] border border-white/10 rounded-[2rem] p-1.5 pl-5 shadow-2xl focus-within:border-indigo-500/40 transition-all duration-300">
+            <input id="query" type="text" placeholder="Command Boka AI..." class="flex-1 bg-transparent outline-none text-white py-3 text-base" autocomplete="off">
+            
+            <button id="voice-trigger" onclick="startVoice()" class="p-2 text-gray-500 hover:text-indigo-400 active:scale-90 transition-all">
+                <span class="material-icons-round">mic</span>
+            </button>
+
+            <button onclick="handleAction()" id="action-btn" class="bg-white text-black w-12 h-12 rounded-full flex items-center justify-center active:scale-90 transition-all shadow-lg">
+                <span class="material-icons-round text-2xl font-bold">arrow_upward</span>
+            </button>
+        </div>
+        <p class="text-[9px] text-center text-gray-600 mt-4 tracking-[0.3em] font-bold uppercase">Encrypted Offline Cache v4.0</p>
+    </div>
+
+    <script>
+        // CONFIGURATION
+        const CONFIG = {
+            API_KEY: "AIzaSyANdyULy-fTj6Es5e3_8_AKcWNMn3sSMjY",
+            URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        };
+
+        let messages = JSON.parse(localStorage.getItem('boka_v4')) || [];
+        let currentMode = 'balanced';
+
+        // SERVICE WORKER (OFFLINE ENGINE)
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const cacheName = 'boka-v4';
+                self.addEventListener('install', e => e.waitUntil(caches.open(cacheName).then(c => c.addAll(['/', 'index.html']))));
+                self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+            `;
+            const blob = new Blob([swCode], {type: 'text/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(blob));
+        }
+
+        // INITIALIZE
+        window.onload = () => {
+            render();
+            checkConnection();
+            window.addEventListener('online', checkConnection);
+            window.addEventListener('offline', checkConnection);
+        };
+
+        function checkConnection() {
+            const isOnline = navigator.onLine;
+            document.body.className = isOnline ? 'online' : 'offline';
+            document.getElementById('query').placeholder = isOnline ? "Command Boka AI..." : "Offline - Interface Only";
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            ['balanced', 'creative', 'precise'].forEach(m => document.getElementById('m-' + m).classList.remove('active-mode'));
+            document.getElementById('m-' + mode).classList.add('active-mode');
+            if(window.navigator.vibrate) window.navigator.vibrate(10);
+        }
+
+        function render() {
+            const feed = document.getElementById('feed');
+            feed.innerHTML = messages.map(m => `<div class="bubble ${m.role === 'user' ? 'user' : 'ai'}">${m.text}</div>`).join('');
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        async function handleAction() {
+            const input = document.getElementById('query');
+            const text = input.value.trim();
+            if (!text || !navigator.onLine) return;
+
+            messages.push({ role: 'user', text: text });
+            input.value = '';
+            render();
+
+            // Typing Indicator
+            const feed = document.getElementById('feed');
+            const loader = document.createElement('div');
+            loader.className = 'bubble ai typing';
+            loader.innerHTML = '<span></span><span></span><span></span>';
+            feed.appendChild(loader);
+            feed.scrollTop = feed.scrollHeight;
+
+            // Mode Logic
+            const settings = {
+                balanced: 0.7,
+                creative: 1.0,
+                precise: 0.2
+            };
+
+            try {
+                const response = await fetch(`${CONFIG.URL}?key=${CONFIG.API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: text }] }],
+                        generationConfig: { temperature: settings[currentMode] }
+                    })
+                });
+
+                const data = await response.json();
+                const reply = data.candidates[0].content.parts[0].text;
+                
+                feed.removeChild(loader);
+                messages.push({ role: 'model', text: reply });
+                localStorage.setItem('boka_v4', JSON.stringify(messages));
+                render();
+                
+                if (window.navigator.vibrate) window.navigator.vibrate(40);
+            } catch (error) {
+                feed.removeChild(loader);
+                alert("Network timeout. Please check signal.");
+            }
+        }
+
+        function startVoice() {
+            const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Recognition) return alert("Browser voice not supported.");
+            const rec = new Recognition();
+            rec.start();
+            document.getElementById('voice-trigger').classList.add('text-indigo-500', 'animate-pulse');
+            rec.onresult = (e) => {
+                document.getElementById('query').value = e.results[0][0].transcript;
+                document.getElementById('voice-trigger').classList.remove('text-indigo-500', 'animate-pulse');
+                handleAction();
+            };
+            rec.onerror = () => document.getElementById('voice-trigger').classList.remove('text-indigo-500', 'animate-pulse');
+        }
+
+        function speakLast() {
+            if (messages.length === 0) return;
+            window.speechSynthesis.cancel();
+            const lastMsg = messages.filter(m => m.role === 'model').pop();
+            if (!lastMsg) return;
+            const utter = new SpeechSynthesisUtterance(lastMsg.text);
+            utter.pitch = 1;
+            utter.rate = 1;
+            window.speechSynthesis.speak(utter);
+        }
+
+        function copyLast() {
+            const lastMsg = messages.filter(m => m.role === 'model').pop();
+            if (lastMsg) {
+                navigator.clipboard.writeText(lastMsg.text);
+                alert("Copied to clipboard!");
+            }
+        }
+
+        function clearChat() {
+            if (confirm("Purge neural memory? All history will be lost.")) {
+                messages = [];
+                localStorage.removeItem('boka_v4');
+                render();
+            }
+        }
+
+        document.getElementById('query').addEventListener('keypress', (e) => e.key === 'Enter' && handleAction());
+    </script>
+</body>
+</html>
