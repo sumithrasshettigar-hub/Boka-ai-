@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>BOKA APEX PRO</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <style>
+        :root { --accent: #6366f1; --bg: #050507; --card: #161618; }
+        body { background: var(--bg); color: white; font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .chat-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; scrollbar-width: none; }
+        .bubble { max-width: 85%; padding: 14px 18px; border-radius: 22px; font-size: 15px; line-height: 1.5; animation: fadeInUp 0.3s ease; }
+        .u { background: var(--accent); align-self: flex-end; border-bottom-right-radius: 4px; box-shadow: 0 8px 20px -5px rgba(99, 102, 241, 0.4); }
+        .a { background: var(--card); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #222; }
+        .mode-btn { padding: 6px 12px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid #333; transition: 0.2s; color: #666; }
+        .active { background: var(--accent); border-color: var(--accent); color: white; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .dots span { width: 4px; height: 4px; background: #666; border-radius: 50%; display: inline-block; margin: 0 2px; animation: pulse 1.4s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <header class="p-4 border-b border-white/5 bg-[#050507] sticky top-0 z-50">
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-2">
+                <span class="material-icons-round text-indigo-500">offline_bolt</span>
+                <span class="font-black text-xs uppercase tracking-widest">Boka Apex Pro</span>
+            </div>
+            <div class="flex gap-4 text-gray-500">
+                <button onclick="speakLast()"><span class="material-icons-round">volume_up</span></button>
+                <button onclick="clearChat()"><span class="material-icons-round">restart_alt</span></button>
+            </div>
+        </div>
+        <div class="flex justify-center gap-2">
+            <button id="m-bal" onclick="setMode('balanced')" class="mode-btn active">Balanced</button>
+            <button id="m-cre" onclick="setMode('creative')" class="mode-btn">Creative</button>
+            <button id="m-pre" onclick="setMode('precise')" class="mode-btn">Precise</button>
+        </div>
+    </header>
+
+    <div id="feed" class="chat-area"></div>
+
+    <div class="p-4 pb-10 bg-[#050507]">
+        <div class="max-w-3xl mx-auto flex items-center bg-[#111] border border-white/10 rounded-[2rem] p-1.5 pl-5 shadow-2xl">
+            <input id="q" type="text" placeholder="Command AI..." class="flex-1 bg-transparent outline-none text-white py-2 text-base">
+            <button onclick="startVoice()" class="p-2 text-gray-500"><span class="material-icons-round">mic</span></button>
+            <button onclick="send()" class="bg-white text-black w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+                <span class="material-icons-round">bolt</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const KEY = "AIzaSyANdyULy-fTj6Es5e3_8_AKcWNMn3sSMjY";
+        const URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+        
+        let chats = JSON.parse(localStorage.getItem('boka_final')) || [];
+        let mode = 'balanced';
+
+        function setMode(m) {
+            mode = m;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('m-' + m.substring(0,3)).classList.add('active');
+            if(navigator.vibrate) navigator.vibrate(10);
+        }
+
+        function render() {
+            const f = document.getElementById('feed');
+            f.innerHTML = chats.map(c => `<div class="bubble ${c.role==='user'?'u':'a'}">${c.text}</div>`).join('');
+            f.scrollTop = f.scrollHeight;
+        }
+
+        async function send() {
+            const i = document.getElementById('q'), v = i.value.trim();
+            if(!v) return;
+            chats.push({role:'user', text:v}); i.value=''; render();
+
+            const f = document.getElementById('feed'), l = document.createElement('div');
+            l.className = 'bubble a dots'; l.innerHTML = '<span></span><span></span><span></span>';
+            f.appendChild(l); f.scrollTop = f.scrollHeight;
+
+            const temp = mode === 'creative' ? 1.0 : mode === 'precise' ? 0.1 : 0.7;
+
+            try {
+                const res = await fetch(`${URL}?key=${KEY}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ contents: [{parts: [{text: v}]}], generationConfig: {temperature: temp} })
+                });
+                const d = await res.json();
+                const txt = d.candidates[0].content.parts[0].text;
+                f.removeChild(l);
+                chats.push({role:'model', text:txt});
+                localStorage.setItem('boka_final', JSON.stringify(chats));
+                render();
+                if(navigator.vibrate) navigator.vibrate(50);
+            } catch(e) { f.removeChild(l); alert("Connection lost."); }
+        }
+
+        function startVoice() {
+            const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if(!R) return;
+            const r = new R(); r.start();
+            r.onresult = (e) => { document.getElementById('q').value = e.results[0][0].transcript; send(); };
+        }
+
+        function speakLast() {
+            const last = chats.filter(c => c.role==='model').pop();
+            if(last) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(last.text)); }
+        }
+
+        function clearChat() { if(confirm("Erase memory?")) { chats=[]; localStorage.removeItem('boka_final'); render(); } }
+        document.getElementById('q').addEventListener('keypress', e => e.key==='Enter' && send());
+        window.onload = render;
+    </script>
+</body>
+</html>
+
